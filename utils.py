@@ -47,19 +47,20 @@ def _normalized_to_pixel_coordinates(normalized_x, normalized_y, image_width, im
     return None
 
 
-# Global face landmarker instance for reuse (more efficient for video processing)
+# Global face landmarker instance for reuse
 _face_landmarker = None
+_frame_timestamp = 0
 
 
 def get_face_landmarker():
-    """Get or create a FaceLandmarker instance."""
+    """Get or create a FaceLandmarker instance using VIDEO mode for better tracking."""
     global _face_landmarker
     if _face_landmarker is None:
         ensure_model_exists()
         base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
         options = vision.FaceLandmarkerOptions(
             base_options=base_options,
-            running_mode=vision.RunningMode.IMAGE,
+            running_mode=vision.RunningMode.VIDEO,  # VIDEO mode enables tracking
             num_faces=1,
             min_face_detection_confidence=0.5,
             min_face_presence_confidence=0.5,
@@ -73,10 +74,11 @@ def get_face_landmarker():
 
 def close_face_landmarker():
     """Close the global face landmarker instance."""
-    global _face_landmarker
+    global _face_landmarker, _frame_timestamp
     if _face_landmarker is not None:
         _face_landmarker.close()
         _face_landmarker = None
+    _frame_timestamp = 0
 
 
 # to display image in cv2 window
@@ -94,10 +96,12 @@ def show_image(image: np.array, msg: str = "Loaded Image"):
 def read_landmarks(image: np.array):
     """
     Read facial landmarks from an image using MediaPipe Tasks API.
+    Uses VIDEO mode for efficient tracking between frames.
     
     image : image as np.array (BGR format from OpenCV)
     Returns: dict mapping landmark index to (x, y) pixel coordinates
     """
+    global _frame_timestamp
     landmark_coordinates = {}
     
     # Convert BGR to RGB for MediaPipe
@@ -106,9 +110,10 @@ def read_landmarks(image: np.array):
     # Create MediaPipe Image
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_rgb)
     
-    # Get face landmarker and detect
+    # Get face landmarker and detect using VIDEO mode
     landmarker = get_face_landmarker()
-    result = landmarker.detect(mp_image)
+    _frame_timestamp += 33  # ~30fps increment
+    result = landmarker.detect_for_video(mp_image, _frame_timestamp)
     
     # Check if any faces were detected
     if not result.face_landmarks:
@@ -150,6 +155,6 @@ def add_mask(
             # Skip if landmarks not found
             continue
 
-    # smoothening of image
-    mask = cv2.GaussianBlur(mask, (7, 7), 4)
+    # smoothening of image - use smaller kernel for speed
+    mask = cv2.GaussianBlur(mask, (5, 5), 3)
     return mask

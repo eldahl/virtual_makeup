@@ -42,6 +42,11 @@ colors = [colors_map[idx] for idx in face_elements]
 
 video_capture = cv2.VideoCapture(0)
 
+# Set reasonable resolution for performance
+video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+video_capture.set(cv2.CAP_PROP_FPS, 30)
+
 try:
     while True:
         # read image from camera
