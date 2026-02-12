@@ -1,4 +1,7 @@
-from utils import *
+from utils import (
+    face_points, read_landmarks, add_mask, close_face_landmarker,
+    cv2, np
+)
 
 # features to add makeup
 face_elements = [
@@ -34,32 +37,40 @@ colors_map = {
 }
 
 
-face_connections=[face_points[idx] for idx in face_elements]
-colors=[colors_map[idx] for idx in face_elements]
+face_connections = [face_points[idx] for idx in face_elements]
+colors = [colors_map[idx] for idx in face_elements]
 
 video_capture = cv2.VideoCapture(0)
-while True:
-    # read image from camera
-    success, image = video_capture.read()
-    image = cv2.flip(image, 1)
-    # if input from camera
-    if success:
+
+try:
+    while True:
+        # read image from camera
+        success, image = video_capture.read()
+        if not success:
+            continue
+        image = cv2.flip(image, 1)
+        
         # create a empty mask like image
         mask = np.zeros_like(image)
         # extract facial landmarks
         face_landmarks = read_landmarks(image=image)
 
-        # create mask for facial features with color
-        mask = add_mask(
-            mask,
-            idx_to_coordinates=face_landmarks,
-        face_connections=face_connections,colors=colors
-        )
+        # Only apply mask if landmarks were detected
+        if face_landmarks:
+            # create mask for facial features with color
+            mask = add_mask(
+                mask,
+                idx_to_coordinates=face_landmarks,
+                face_connections=face_connections,
+                colors=colors
+            )
         # combine the image and mask with w.r.to weights
         output = cv2.addWeighted(image, 1.0, mask, 0.2, 1.0)
         cv2.imshow("Feature", output)
         # press q to exit the cv2 window
-        if cv2.waitKey(100) & 0xFF == ord("q"):
+        if cv2.waitKey(1) & 0xFF == ord("q"):
             break
-video_capture.release()
-cv2.destroyAllWindows()
+finally:
+    video_capture.release()
+    close_face_landmarker()
+    cv2.destroyAllWindows()

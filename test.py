@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import os
+import urllib.request
 
 try:
     import pyvirtualcam
@@ -12,9 +13,21 @@ except ImportError:
     print("Install with: pip install pyvirtualcam")
     print("Also need v4l2loopback: sudo modprobe v4l2loopback devices=1")
 
-mp_drawing = mp.solutions.drawing_utils
-mp_drawing_styles = mp.solutions.drawing_styles
-mp_face_mesh = mp.solutions.face_mesh
+# MediaPipe Tasks API imports
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+
+# Model file path and URL
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "face_landmarker.task")
+MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+
+
+def ensure_model_exists():
+    """Download the face landmarker model if it doesn't exist."""
+    if not os.path.exists(MODEL_PATH):
+        print(f"Downloading face landmarker model to {MODEL_PATH}...")
+        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+        print("Model downloaded successfully.")
 
 # ============ MAKEUP SYSTEM ============
 
@@ -56,7 +69,7 @@ def apply_foundation(image, face_landmarks, strength=0.5, warmth=0):
     """
     h, w = image.shape[:2]
     coords = {}
-    for idx, lm in enumerate(face_landmarks.landmark):
+    for idx, lm in enumerate(face_landmarks):
         coords[idx] = (int(lm.x * w), int(lm.y * h))
     
     # Create face mask
@@ -123,7 +136,7 @@ def apply_contour(image, face_landmarks, shadow_strength=0.15, highlight_strengt
     """
     h, w = image.shape[:2]
     coords = {}
-    for idx, lm in enumerate(face_landmarks.landmark):
+    for idx, lm in enumerate(face_landmarks):
         coords[idx] = (int(lm.x * w), int(lm.y * h))
     
     result = image.copy()
@@ -175,7 +188,7 @@ def apply_lip_gloss(image, face_landmarks, intensity=0.3):
     """Add glossy/shiny effect to lips with specular highlights."""
     h, w = image.shape[:2]
     coords = {}
-    for idx, lm in enumerate(face_landmarks.landmark):
+    for idx, lm in enumerate(face_landmarks):
         coords[idx] = (int(lm.x * w), int(lm.y * h))
     
     # Create combined lip mask
@@ -225,7 +238,7 @@ def apply_blush_glow(image, face_landmarks, color=(180, 140, 200), intensity=0.2
     """Apply a soft, diffused blush with natural gradient."""
     h, w = image.shape[:2]
     coords = {}
-    for idx, lm in enumerate(face_landmarks.landmark):
+    for idx, lm in enumerate(face_landmarks):
         coords[idx] = (int(lm.x * w), int(lm.y * h))
     
     result = image.copy()
@@ -410,7 +423,7 @@ def get_landmark_coords(face_landmarks, image_shape):
     """Extract pixel coordinates for all face landmarks."""
     h, w = image_shape[:2]
     coords = {}
-    for idx, lm in enumerate(face_landmarks.landmark):
+    for idx, lm in enumerate(face_landmarks):
         x = int(lm.x * w)
         y = int(lm.y * h)
         coords[idx] = (x, y)
@@ -545,7 +558,7 @@ def get_face_transform(face_landmarks, image_shape):
     
     # Get landmark positions (MediaPipe provides normalized x, y and relative z)
     def get_3d(idx):
-        lm = face_landmarks.landmark[idx]
+        lm = face_landmarks[idx]
         return np.array([lm.x * w, lm.y * h, lm.z * w])
     
     forehead = get_3d(FOREHEAD)
@@ -936,7 +949,20 @@ MODELS = {
 # List for cycling through models
 MODEL_KEYS = list(MODELS.keys())
 
+def draw_face_mesh_landmarks(image, face_landmarks):
+    """Draw face mesh landmarks on the image (simplified version without solutions API)."""
+    h, w = image.shape[:2]
+    # Draw landmarks as small circles
+    for lm in face_landmarks:
+        x = int(lm.x * w)
+        y = int(lm.y * h)
+        cv2.circle(image, (x, y), 1, (0, 255, 0), -1)
+
+
 def main():
+    # Ensure model file exists
+    ensure_model_exists()
+    
     # Current model index
     current_model_idx = 0
     show_face_mesh = False
@@ -962,7 +988,6 @@ def main():
     current_makeup = get_current_makeup()
     
     # For webcam input:
-    drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
     cap = cv2.VideoCapture(0)
     
     # Set camera to highest resolution (request 4K, camera will use max supported)
@@ -1003,12 +1028,22 @@ def main():
             print("Make sure v4l2loopback is loaded: sudo modprobe v4l2loopback devices=1")
             vcam = None
     
-    with mp_face_mesh.FaceMesh(
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5) as face_mesh:
-        
+    # Create FaceLandmarker using Tasks API
+    base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
+    options = vision.FaceLandmarkerOptions(
+        base_options=base_options,
+        running_mode=vision.RunningMode.IMAGE,
+        num_faces=1,
+        min_face_detection_confidence=0.5,
+        min_face_presence_confidence=0.5,
+        min_tracking_confidence=0.5,
+        output_face_blendshapes=False,
+        output_facial_transformation_matrixes=False
+    )
+    
+    face_landmarker = vision.FaceLandmarker.create_from_options(options)
+    
+    try:
         while cap.isOpened():
             success, image = cap.read()
             if not success:
@@ -1018,26 +1053,19 @@ def main():
             # Flip for selfie view
             image = cv2.flip(image, 1)
             
-            # Process face mesh
-            image.flags.writeable = False
+            # Process face mesh using Tasks API
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            results = face_mesh.process(image_rgb)
-            image.flags.writeable = True
+            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_rgb)
+            results = face_landmarker.detect(mp_image)
             
-            if results.multi_face_landmarks:
-                for face_landmarks in results.multi_face_landmarks:
+            if results.face_landmarks:
+                for face_landmarks in results.face_landmarks:
                     # Apply makeup first (before 3D model)
                     image = apply_makeup(image, face_landmarks, current_makeup)
                     
                     # Optionally draw face mesh
                     if show_face_mesh:
-                        mp_drawing.draw_landmarks(
-                            image=image,
-                            landmark_list=face_landmarks,
-                            connections=mp_face_mesh.FACEMESH_TESSELATION,
-                            landmark_drawing_spec=None,
-                            connection_drawing_spec=mp_drawing_styles
-                            .get_default_face_mesh_tesselation_style())
+                        draw_face_mesh_landmarks(image, face_landmarks)
                     
                     # Get face transform directly from mesh landmarks
                     face_transform = get_face_transform(face_landmarks, image.shape)
@@ -1114,11 +1142,13 @@ def main():
                 else:
                     print("Virtual camera not available")
     
-    # Cleanup
-    cap.release()
-    if vcam is not None:
-        vcam.close()
-    cv2.destroyAllWindows()
+    finally:
+        # Cleanup
+        face_landmarker.close()
+        cap.release()
+        if vcam is not None:
+            vcam.close()
+        cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
