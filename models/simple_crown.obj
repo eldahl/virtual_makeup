@@ -1,0 +1,52 @@
+# Simple Crown Model
+# Place custom OBJ files in this directory
+
+# Base vertices (octagon)
+v 30 0 0
+v 21.21 0 21.21
+v 0 0 30
+v -21.21 0 21.21
+v -30 0 0
+v -21.21 0 -21.21
+v 0 0 -30
+v 21.21 0 -21.21
+
+# Peak vertices
+v 27 -40 10.5
+v 0 -40 27
+v -27 -40 10.5
+v -27 -40 -10.5
+v 0 -40 -27
+v 27 -40 -10.5
+
+# Top ring vertices (smaller)
+v 21 -25 0
+v 14.85 -25 14.85
+v 0 -25 21
+v -14.85 -25 14.85
+v -21 -25 0
+v -14.85 -25 -14.85
+v 0 -25 -21
+v 14.85 -25 -14.85
+
+# Faces - base to peaks
+f 1 2 9
+f 2 3 10
+f 3 4 10
+f 4 5 11
+f 5 6 12
+f 6 7 13
+f 7 8 14
+f 8 1 9
+
+# Faces - peaks to top ring
+f 9 10 16 15
+f 10 11 18 17
+f 11 12 19 18
+f 12 13 20 19
+f 13 14 22 21
+f 14 9 15 22
+
+
+
+
