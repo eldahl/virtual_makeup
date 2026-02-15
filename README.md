@@ -14,5 +14,5 @@ python test.py
 Use instructions on the info box from the video stream output window. 
 
 # Credits
-Original author: https://github.com/Jayanths9/Virtual_Makeup
+Original author: https://github.com/Jayanths9/Virtual_Makeup  
 All added code is done by Claude Opus 4.5.
