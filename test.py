@@ -846,6 +846,7 @@ def main():
     current_makeup = get_current_makeup()
     
     cap = cv2.VideoCapture(0)
+    #cap = cv2.VideoCapture(4, cv2.CAP_DSHOW)
     
     # Use lower resolution for better performance
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
